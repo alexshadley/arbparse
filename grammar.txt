@@ -1,0 +1,5 @@
+assignmentStatement
+    : Identifier Assignment expression
+
+expression
+    : LParen expression RParen | Integer | Boolean | expression <OP> expression
