@@ -1,28 +1,28 @@
 "use strict"
-// Written Docs for this tutorial step can be found here:
-// https://github.com/SAP/chevrotain/blob/master/docs/tutorial/step2_parsing.md
-
-// Tutorial Step 2:
 
 // Adding a Parser (grammar only, only reads the input without any actions).
 // Using the Token Vocabulary defined in the previous step.
 
-const selectLexer = require("../step1_lexing/step1_lexing")
+const scriptLexer = require("./lexing")
 const Parser = require("chevrotain").Parser
-const tokenVocabulary = selectLexer.tokenVocabulary
+const tokenVocabulary = scriptLexer.tokenVocabulary
 
 // individual imports, prefer ES6 imports if supported in your runtime/transpiler...
-const Select = tokenVocabulary.Select
-const From = tokenVocabulary.From
-const Where = tokenVocabulary.Where
 const Identifier = tokenVocabulary.Identifier
 const Integer = tokenVocabulary.Integer
-const GreaterThan = tokenVocabulary.GreaterThan
-const LessThan = tokenVocabulary.LessThan
-const Comma = tokenVocabulary.Comma
+const Boolean = tokenVocabulary.Boolean
+const Equivalence = tokenVocabulary.Equivalence
+const Assignment = tokenVocabulary.Assignment
+const Addition = tokenVocabulary.Addition
+const Subtraction = tokenVocabulary.Subtraction
+const Multiplication = tokenVocabulary.Multiplication
+const LogicalOR = tokenVocabulary.LogicalOR
+const LogcialAND = tokenVocabulary.LogicalAND
+const LParen = tokenVocabulary.LParen
+const RParen = tokenVocabulary.RParen
 
 // ----------------- parser -----------------
-class SelectParser extends Parser {
+class ScriptParser extends Parser {
     // A config object as a constructor argument is normally not needed.
     // Our tutorial scenario requires a dynamic configuration to support step3 without duplicating code.
     constructor(config) {
@@ -31,57 +31,52 @@ class SelectParser extends Parser {
         // for conciseness
         const $ = this
 
-        $.RULE("selectStatement", () => {
-            $.SUBRULE($.selectClause)
-            $.SUBRULE($.fromClause)
-            $.OPTION(() => {
-                $.SUBRULE($.whereClause)
-            })
-        })
-
-        $.RULE("selectClause", () => {
-            $.CONSUME(Select)
-            $.AT_LEAST_ONE_SEP({
-                SEP: Comma,
-                DEF: () => {
-                    $.CONSUME(Identifier)
-                }
-            })
-        })
-
-        $.RULE("fromClause", () => {
-            $.CONSUME(From)
+        $.RULE("assignmentStatement", () => {
             $.CONSUME(Identifier)
-        })
-
-        $.RULE("whereClause", () => {
-            $.CONSUME(Where)
+            $.CONSUME(Assignment)
             $.SUBRULE($.expression)
         })
 
-        // The "rhs" and "lhs" (Right/Left Hand Side) labels will provide easy
-        // to use names during CST Visitor (step 3a).
         $.RULE("expression", () => {
-            $.SUBRULE($.atomicExpression, { LABEL: "lhs" })
-            $.SUBRULE($.relationalOperator)
-            $.SUBRULE2($.atomicExpression, { LABEL: "rhs" }) // note the '2' suffix to distinguish
-            // from the 'SUBRULE(atomicExpression)'
-            // 2 lines above.
+            $.SUBRULE($.subtExpression)
+        })
+
+        $.RULE("subtExpression", () => {
+            $.SUBRULE($.addExpression)
+            $.MANY( () => {
+                $.CONSUME(Subtraction)
+                $.SUBRULE2($.addExpression)
+            })
+        })
+
+        $.RULE("addExpression", () => {
+            $.SUBRULE($.multExpression)
+            $.MANY( () => {
+                $.CONSUME(Addition)
+                $.SUBRULE2($.multExpression)
+            })
+        })
+
+        $.RULE("multExpression", () => {
+            $.SUBRULE($.atomicExpression)
+            $.MANY( () => {
+                $.CONSUME(Multiplication)
+                $.SUBRULE2($.atomicExpression)
+            })
         })
 
         $.RULE("atomicExpression", () => {
             $.OR([
+                { ALT: () => {
+                    $.CONSUME(LParen)
+                    $.SUBRULE($.expression)
+                    $.CONSUME(RParen)
+                }},
                 { ALT: () => $.CONSUME(Integer) },
-                { ALT: () => $.CONSUME(Identifier) }
+                { ALT: () => $.CONSUME(Identifier) },
             ])
         })
 
-        $.RULE("relationalOperator", () => {
-            $.OR([
-                { ALT: () => $.CONSUME(GreaterThan) },
-                { ALT: () => $.CONSUME(LessThan) }
-            ])
-        })
 
         // very important to call this after all the rules have been defined.
         // otherwise the parser may not work correctly as it will lack information
@@ -91,21 +86,21 @@ class SelectParser extends Parser {
 }
 
 // We only ever need one as the parser internal state is reset for each new input.
-const parserInstance = new SelectParser()
+const parserInstance = new ScriptParser()
 
 module.exports = {
     parserInstance: parserInstance,
 
-    SelectParser: SelectParser,
+    ScriptParser: ScriptParser,
 
     parse: function(inputText) {
-        const lexResult = selectLexer.lex(inputText)
+        const lexResult = scriptLexer.lex(inputText)
 
         // ".input" is a setter which will reset the parser's internal's state.
         parserInstance.input = lexResult.tokens
 
         // No semantic actions so this won't return anything yet.
-        parserInstance.selectStatement()
+        parserInstance.assignmentStatement()
 
         if (parserInstance.errors.length > 0) {
             throw Error(
